@@ -84,17 +84,20 @@ def show_batch(x: LMTensorText, y, samples, ctxs=None, max_n=10, **kwargs):
     return show_batch[TensorText](x, None, samples, ctxs=ctxs, max_n=max_n, **kwargs)
 
 #Cell
-def pad_input(samples, pad_idx=1, pad_first=False, backwards=False):
+def pad_input(samples, pad_idx=1, pad_fields=0, pad_first=False, backwards=False):
     "Function that collect samples and adds padding. Flips token order if needed"
-    max_len = max([len(s[0]) for s in samples])
+    pad_fields = L(pad_fields)
+    max_len_l = pad_fields.map(lambda f: max([len(s[f]) for s in samples]))
     if backwards: pad_first = not pad_first
-    def _f(x, *y):
+    def _f(field_idx, x):
+        if field_idx not in pad_fields: return x
+        idx = pad_fields.items.index(field_idx) #TODO: remove items if L.index is fixed
         sl = slice(-len(x), sys.maxsize) if pad_first else slice(0, len(x))
-        pad =  x.new_zeros(max_len-x.shape[0])+pad_idx
+        pad =  x.new_zeros(max_len_l[idx]-x.shape[0])+pad_idx
         x1 = torch.cat([pad, x] if pad_first else [x, pad])
         if backwards: x1 = x1.flip(0)
-        return (retain_type(x1, x), *y)
-    return [_f(x,*y) for x,*y in samples]
+        return retain_type(x1, x)
+    return [tuple(map(lambda idxx: _f(*idxx), enumerate(s))) for s in samples]
 
 #Cell
 def _default_sort(x): return len(x[0])
